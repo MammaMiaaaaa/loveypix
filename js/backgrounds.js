@@ -142,9 +142,14 @@ export function preloadVirtualBgImage(bgId) {
 // MediaPipe Selfie Segmenter (Lazy-loaded on first Virtual BG selection)
 // ============================================================================
 
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isMobile = isIOS || /Android/i.test(navigator.userAgent);
+
 let segmenter = null;
 let segmenterPromise = null;
 let segmenterFailed = false;
+let lastMaskTimestamp = 0;
+let hasValidMask = false;
 
 const maskCanvas = document.createElement("canvas");
 const maskCtx = maskCanvas.getContext("2d");
@@ -157,51 +162,51 @@ export function isSegmenterReady() {
   return Boolean(segmenter);
 }
 
+export function prewarmSegmenter() {
+  if (!segmenter && !segmenterPromise && !segmenterFailed) {
+    ensureSegmenter().catch(() => {});
+  }
+}
+
 export async function ensureSegmenter(onStatus) {
   if (segmenter) return segmenter;
   if (segmenterFailed) return null;
-  if (segmenterPromise) return segmenterPromise;
+  if (segmenterPromise) {
+    if (onStatus) onStatus("Memuat AI Virtual Background...");
+    const res = await segmenterPromise;
+    if (onStatus) onStatus(null);
+    return res;
+  }
 
   segmenterPromise = (async () => {
-    try {
-      if (onStatus) onStatus("Memuat AI Virtual Background...");
+    const modelUrl =
+      "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite";
+
+    const createWithDelegate = async (delegate) => {
       const vision = await import(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
       );
       const fileset = await vision.FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
       );
-      segmenter = await vision.ImageSegmenter.createFromOptions(fileset, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-          delegate: "GPU",
-        },
+      return vision.ImageSegmenter.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: modelUrl, delegate },
         runningMode: "VIDEO",
         outputCategoryMask: false,
         outputConfidenceMasks: true,
       });
+    };
+
+    try {
+      if (onStatus) onStatus("Memuat AI Virtual Background...");
+      // On iOS Safari, GPU WebGL2 delegate often hangs/fails and causes 15-20s retries; go straight to CPU
+      segmenter = await createWithDelegate(isIOS ? "CPU" : "GPU");
       if (onStatus) onStatus(null);
       return segmenter;
     } catch (err) {
-      console.warn("MediaPipe GPU init failed, retrying CPU:", err);
+      console.warn("Primary segmenter delegate failed, retrying CPU:", err);
       try {
-        const vision = await import(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
-        );
-        const fileset = await vision.FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-        segmenter = await vision.ImageSegmenter.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-            delegate: "CPU",
-          },
-          runningMode: "VIDEO",
-          outputCategoryMask: false,
-          outputConfidenceMasks: true,
-        });
+        segmenter = await createWithDelegate("CPU");
         if (onStatus) onStatus(null);
         return segmenter;
       } catch (err2) {
@@ -248,56 +253,69 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
     return;
   }
 
-  let result = null;
-  try {
-    result = segmenter.segmentForVideo(video, performance.now());
-  } catch {
-    drawCroppedVideo(ctx, w, h);
-    return;
-  }
+  // On mobile, throttle segmentation to ~15fps and reuse latest mask for smooth rendering
+  const now = performance.now();
+  const minInterval = isMobile ? 65 : 28;
+  if (!hasValidMask || now - lastMaskTimestamp >= minInterval) {
+    let result = null;
+    try {
+      result = segmenter.segmentForVideo(video, now);
+    } catch {
+      drawCroppedVideo(ctx, w, h);
+      return;
+    }
 
-  const confMask = result?.confidenceMasks?.[0];
-  if (!confMask) {
+    const confMask = result?.confidenceMasks?.[0];
+    if (confMask) {
+      const mw = confMask.width;
+      const mh = confMask.height;
+      const floatData = confMask.getAsFloat32Array();
+
+      if (maskCanvas.width !== mw || maskCanvas.height !== mh) {
+        maskCanvas.width = mw;
+        maskCanvas.height = mh;
+      }
+      const imgData = maskCtx.createImageData(mw, mh);
+      const px = imgData.data;
+      for (let i = 0; i < floatData.length; i++) {
+        const v = floatData[i];
+        const alpha = v < 0.25 ? 0 : v > 0.72 ? 255 : Math.round(((v - 0.25) / 0.47) * 255);
+        const o = i * 4;
+        px[o] = 255;
+        px[o + 1] = 255;
+        px[o + 2] = 255;
+        px[o + 3] = alpha;
+      }
+      maskCtx.putImageData(imgData, 0, 0);
+      hasValidMask = true;
+      lastMaskTimestamp = now;
+    }
     result?.close?.();
+  }
+
+  if (!hasValidMask) {
     drawCroppedVideo(ctx, w, h);
     return;
   }
 
-  const mw = confMask.width;
-  const mh = confMask.height;
-  const floatData = confMask.getAsFloat32Array();
+  const mw = maskCanvas.width;
+  const mh = maskCanvas.height;
 
-  // 1) Build smooth alpha mask
-  if (maskCanvas.width !== mw || maskCanvas.height !== mh) {
-    maskCanvas.width = mw;
-    maskCanvas.height = mh;
-  }
-  const imgData = maskCtx.createImageData(mw, mh);
-  const px = imgData.data;
-  for (let i = 0; i < floatData.length; i++) {
-    const v = floatData[i];
-    const alpha = v < 0.25 ? 0 : v > 0.72 ? 255 : Math.round(((v - 0.25) / 0.47) * 255);
-    const o = i * 4;
-    px[o] = 255;
-    px[o + 1] = 255;
-    px[o + 2] = 255;
-    px[o + 3] = alpha;
-  }
-  maskCtx.putImageData(imgData, 0, 0);
-  result.close();
-
-  // 2) Draw chosen background (blur, real image, or procedural Y2K art)
+  // 2) Draw chosen background (fast downscale blur for iOS compatibility, real image, or Y2K art)
   const bgDef = VIRTUAL_BGS.find((b) => b.id === bgId);
   if (bgId === "blur") {
-    if (blurCanvas.width !== w || blurCanvas.height !== h) {
-      blurCanvas.width = w;
-      blurCanvas.height = h;
+    const bw = Math.max(48, Math.round(w / 14));
+    const bh = Math.max(36, Math.round(h / 14));
+    if (blurCanvas.width !== bw || blurCanvas.height !== bh) {
+      blurCanvas.width = bw;
+      blurCanvas.height = bh;
     }
-    blurCtx.save();
-    blurCtx.filter = "blur(14px)";
-    drawCroppedVideo(blurCtx, w, h);
-    blurCtx.restore();
-    ctx.drawImage(blurCanvas, 0, 0, w, h);
+    drawCroppedVideo(blurCtx, bw, bh);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(blurCanvas, 0, 0, bw, bh, 0, 0, w, h);
+    ctx.restore();
   } else if (bgDef?.src) {
     const bgImg = bgImageCache.get(bgId);
     if (bgImg instanceof HTMLImageElement && bgImg.complete && bgImg.naturalWidth > 0) {
@@ -335,7 +353,9 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
 
   personCtx.save();
   personCtx.globalCompositeOperation = "destination-in";
-  personCtx.filter = "blur(2px)";
+  if (!isIOS) {
+    personCtx.filter = "blur(1.5px)";
+  }
   if (mirrored) {
     personCtx.translate(w, 0);
     personCtx.scale(-1, 1);

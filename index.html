@@ -406,6 +406,31 @@
     <p>Dibuat dengan ♥ oleh <strong>LoveyPix</strong> — Semua foto diproses 100% di perangkatmu (privasi aman).</p>
   </footer>
 
+  <!-- Save Modal (iPhone / Mobile fallback for long-press Save to Photos) -->
+  <div class="save-modal" id="saveModal" role="dialog" aria-modal="true" aria-labelledby="saveModalTitle" hidden>
+    <div class="save-modal-card retro-window">
+      <div class="window-bar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot pink"></span>
+          <span class="dot yellow"></span>
+          <span class="dot lime"></span>
+        </div>
+        <span class="window-title" id="saveModalTitle">SIMPAN_FOTO.PNG</span>
+        <button type="button" class="window-close" id="btnCloseSaveModal" aria-label="Tutup">×</button>
+      </div>
+      <div class="save-modal-body">
+        <p class="save-modal-tip">📱 <strong>Di iPhone:</strong> Tahan (tekan lama) gambar di bawah → pilih <strong>"Simpan ke Foto" (Save to Photos)</strong>!</p>
+        <div class="save-modal-img-wrap">
+          <img id="saveModalImg" alt="Hasil foto strip LoveyPix" />
+        </div>
+        <div class="save-modal-actions">
+          <a class="btn-primary btn-sm" id="saveModalDownloadLink" download="loveypix-strip.png">⬇️ Download File</a>
+          <button type="button" class="btn-secondary btn-sm" id="btnCloseSaveModal2">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 

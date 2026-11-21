@@ -1,7 +1,13 @@
 // LoveyPix — Main Application Controller
 import { FILTERS, getFilterById } from "./filters.js";
 import { FRAMES, getFrameById, renderPhotoStrip, renderDemoStrip } from "./frames.js";
-import { VIRTUAL_BGS, ensureSegmenter, preloadVirtualBgImage, drawVideoWithVirtualBg } from "./backgrounds.js";
+import {
+  VIRTUAL_BGS,
+  ensureSegmenter,
+  prewarmSegmenter,
+  preloadVirtualBgImage,
+  drawVideoWithVirtualBg,
+} from "./backgrounds.js";
 import {
   CHARACTER_PACKS,
   getAllCharacters,
@@ -153,6 +159,12 @@ const el = {
   customizeFilterChips: document.getElementById("customizeFilterChips"),
   coupleCaptionInput: document.getElementById("coupleCaptionInput"),
   showDateCheckbox: document.getElementById("showDateCheckbox"),
+
+  saveModal: document.getElementById("saveModal"),
+  saveModalImg: document.getElementById("saveModalImg"),
+  saveModalDownloadLink: document.getElementById("saveModalDownloadLink"),
+  btnCloseSaveModal: document.getElementById("btnCloseSaveModal"),
+  btnCloseSaveModal2: document.getElementById("btnCloseSaveModal2"),
 
   toast: document.getElementById("toast"),
 };
@@ -907,6 +919,8 @@ async function startCamera() {
   applyLiveFilter();
   syncCameraToolsUI();
   startLiveRenderLoop();
+  // Silently pre-warm AI Virtual Background model so it's ready faster when tapped
+  setTimeout(() => prewarmSegmenter(), 600);
 }
 
 function startLiveRenderLoop() {
@@ -1277,26 +1291,86 @@ function renderMainStrip() {
 }
 
 // ============================================================================
-// Export & Share
+// Export & Share (Full iOS Safari + Android + Desktop Support)
 // ============================================================================
 
-function downloadStrip() {
+const isIOSDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+let currentSaveBlobUrl = null;
+
+function closeSaveModal() {
+  el.saveModal.hidden = true;
+}
+
+el.btnCloseSaveModal.addEventListener("click", closeSaveModal);
+el.btnCloseSaveModal2.addEventListener("click", closeSaveModal);
+el.saveModal.addEventListener("click", (e) => {
+  if (e.target === el.saveModal) closeSaveModal();
+});
+
+function openSaveModal(blob, filename) {
+  if (currentSaveBlobUrl) URL.revokeObjectURL(currentSaveBlobUrl);
+  currentSaveBlobUrl = URL.createObjectURL(blob);
+  el.saveModalImg.src = currentSaveBlobUrl;
+  el.saveModalDownloadLink.href = currentSaveBlobUrl;
+  el.saveModalDownloadLink.download = filename;
+  el.saveModal.hidden = false;
+}
+
+async function downloadStrip() {
   renderMainStrip();
-  const link = document.createElement("a");
   const stamp = new Date().toISOString().slice(0, 10);
-  link.download = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
-  link.href = el.stripCanvas.toDataURL("image/png");
+  const filename = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
+
+  const blob = await new Promise((res) => el.stripCanvas.toBlob(res, "image/png"));
+  if (!blob) {
+    showToast("Gagal membuat gambar. Coba lagi ya!");
+    return;
+  }
+
+  // On iOS (iPhone/iPad), <a download="data:..."> silently fails!
+  // Use native iOS Share Sheet ("Save Image" -> saves straight to Photos) with Save Modal fallback.
+  if (isIOSDevice) {
+    const file = new File([blob], filename, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: "LoveyPix Photo Strip ♥",
+          files: [file],
+        });
+        sound.success();
+        showToast("Pilih 'Simpan Gambar / Save Image' untuk masuk Galeri! ♥");
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return;
+      }
+    }
+    // Fallback for iOS in-app browsers (WhatsApp/Instagram/LINE): show modal for long-press Save to Photos
+    openSaveModal(blob, filename);
+    sound.success();
+    return;
+  }
+
+  // Desktop & Android: fast Blob URL download (never hits data: URL size limits)
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
   link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
   sound.success();
   showToast("Foto strip HD berhasil di-download! ♥");
 }
 
 async function shareStrip() {
   renderMainStrip();
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
   try {
     const blob = await new Promise((res) => el.stripCanvas.toBlob(res, "image/png"));
     if (!blob) return;
-    const file = new File([blob], `loveypix-${state.frameId}.png`, { type: "image/png" });
+    const file = new File([blob], filename, { type: "image/png" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         title: "LoveyPix Photo Strip ♥",
@@ -1304,7 +1378,7 @@ async function shareStrip() {
         files: [file],
       });
     } else {
-      downloadStrip();
+      openSaveModal(blob, filename);
     }
   } catch (err) {
     if (err.name !== "AbortError") {
