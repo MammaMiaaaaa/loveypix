@@ -139,10 +139,12 @@ export function preloadVirtualBgImage(bgId) {
 }
 
 // ============================================================================
-// MediaPipe Selfie Segmenter (Lazy-loaded on first Virtual BG selection)
+// MediaPipe Selfie Segmenter (Pre-warmed, Balanced Speed + Crisp 256x256 Edges)
 // ============================================================================
 
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isIOS =
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isMobile = isIOS || /Android/i.test(navigator.userAgent);
 
 let segmenter = null;
@@ -150,13 +152,16 @@ let segmenterPromise = null;
 let segmenterFailed = false;
 let lastMaskTimestamp = 0;
 let hasValidMask = false;
+let prevAlpha = null; // Temporal smoothing buffer to prevent flickering/jagged edges
 
 const maskCanvas = document.createElement("canvas");
 const maskCtx = maskCanvas.getContext("2d");
 const personCanvas = document.createElement("canvas");
 const personCtx = personCanvas.getContext("2d");
-const blurCanvas = document.createElement("canvas");
-const blurCtx = blurCanvas.getContext("2d");
+const blurCanvasA = document.createElement("canvas");
+const blurCtxA = blurCanvasA.getContext("2d");
+const blurCanvasB = document.createElement("canvas");
+const blurCtxB = blurCanvasB.getContext("2d");
 
 export function isSegmenterReady() {
   return Boolean(segmenter);
@@ -179,8 +184,9 @@ export async function ensureSegmenter(onStatus) {
   }
 
   segmenterPromise = (async () => {
+    // 256x256 square selfie_segmenter gives much cleaner hair/shoulder edges than landscape 256x144
     const modelUrl =
-      "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite";
+      "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
 
     const createWithDelegate = async (delegate) => {
       const vision = await import(
@@ -199,7 +205,7 @@ export async function ensureSegmenter(onStatus) {
 
     try {
       if (onStatus) onStatus("Memuat AI Virtual Background...");
-      // On iOS Safari, GPU WebGL2 delegate often hangs/fails and causes 15-20s retries; go straight to CPU
+      // On iOS, go straight to CPU to avoid the 15s WebGL2 GPU timeout while keeping 256x256 quality
       segmenter = await createWithDelegate(isIOS ? "CPU" : "GPU");
       if (onStatus) onStatus(null);
       return segmenter;
@@ -253,9 +259,9 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
     return;
   }
 
-  // On mobile, throttle segmentation to ~15fps and reuse latest mask for smooth rendering
+  // Balanced ~25fps on mobile, ~40fps on desktop with temporal & spatial edge smoothing
   const now = performance.now();
-  const minInterval = isMobile ? 65 : 28;
+  const minInterval = isMobile ? 38 : 24;
   if (!hasValidMask || now - lastMaskTimestamp >= minInterval) {
     let result = null;
     try {
@@ -269,22 +275,63 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
     if (confMask) {
       const mw = confMask.width;
       const mh = confMask.height;
+      const len = mw * mh;
       const floatData = confMask.getAsFloat32Array();
 
+      if (!prevAlpha || prevAlpha.length !== len) {
+        prevAlpha = new Float32Array(len);
+      }
+
+      // 1) Smoothstep confidence ramp + temporal blend (reduces jitter)
+      const rawAlpha = new Float32Array(len);
+      for (let i = 0; i < len; i++) {
+        const v = floatData[i];
+        let t = (v - 0.18) / 0.62;
+        if (t < 0) t = 0;
+        else if (t > 1) t = 1;
+        // Smoothstep curve for natural soft hair/shoulder transition
+        const s = t * t * (3 - 2 * t);
+        const blended = hasValidMask ? s * 0.72 + prevAlpha[i] * 0.28 : s;
+        prevAlpha[i] = blended;
+        rawAlpha[i] = blended;
+      }
+
+      // 2) Fast 3x3 spatial feathering pass on mask edges (eliminates jagged/stair-step edges!)
       if (maskCanvas.width !== mw || maskCanvas.height !== mh) {
         maskCanvas.width = mw;
         maskCanvas.height = mh;
       }
       const imgData = maskCtx.createImageData(mw, mh);
       const px = imgData.data;
-      for (let i = 0; i < floatData.length; i++) {
-        const v = floatData[i];
-        const alpha = v < 0.25 ? 0 : v > 0.72 ? 255 : Math.round(((v - 0.25) / 0.47) * 255);
-        const o = i * 4;
-        px[o] = 255;
-        px[o + 1] = 255;
-        px[o + 2] = 255;
-        px[o + 3] = alpha;
+      for (let y = 0; y < mh; y++) {
+        const yUp = y > 0 ? y - 1 : 0;
+        const yDn = y < mh - 1 ? y + 1 : mh - 1;
+        for (let x = 0; x < mw; x++) {
+          const idx = y * mw + x;
+          const c = rawAlpha[idx];
+          let avg = c;
+          // Only feather transition zone pixels for maximum speed
+          if (c > 0.02 && c < 0.98) {
+            const xL = x > 0 ? x - 1 : 0;
+            const xR = x < mw - 1 ? x + 1 : mw - 1;
+            avg =
+              (rawAlpha[yUp * mw + xL] +
+                rawAlpha[yUp * mw + x] * 2 +
+                rawAlpha[yUp * mw + xR] +
+                rawAlpha[y * mw + xL] * 2 +
+                c * 4 +
+                rawAlpha[y * mw + xR] * 2 +
+                rawAlpha[yDn * mw + xL] +
+                rawAlpha[yDn * mw + x] * 2 +
+                rawAlpha[yDn * mw + xR]) /
+              16;
+          }
+          const o = idx * 4;
+          px[o] = 255;
+          px[o + 1] = 255;
+          px[o + 2] = 255;
+          px[o + 3] = Math.round(avg * 255);
+        }
       }
       maskCtx.putImageData(imgData, 0, 0);
       hasValidMask = true;
@@ -301,21 +348,10 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
   const mw = maskCanvas.width;
   const mh = maskCanvas.height;
 
-  // 2) Draw chosen background (fast downscale blur for iOS compatibility, real image, or Y2K art)
+  // 2) Draw chosen background
   const bgDef = VIRTUAL_BGS.find((b) => b.id === bgId);
   if (bgId === "blur") {
-    const bw = Math.max(48, Math.round(w / 14));
-    const bh = Math.max(36, Math.round(h / 14));
-    if (blurCanvas.width !== bw || blurCanvas.height !== bh) {
-      blurCanvas.width = bw;
-      blurCanvas.height = bh;
-    }
-    drawCroppedVideo(blurCtx, bw, bh);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(blurCanvas, 0, 0, bw, bh, 0, 0, w, h);
-    ctx.restore();
+    drawSmoothSoftBlur(ctx, drawCroppedVideo, w, h);
   } else if (bgDef?.src) {
     const bgImg = bgImageCache.get(bgId);
     if (bgImg instanceof HTMLImageElement && bgImg.complete && bgImg.naturalWidth > 0) {
@@ -329,7 +365,7 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
     drawVirtualBgArt(ctx, bgId, w, h);
   }
 
-  // 3) Cut out foreground person
+  // 3) Cut out foreground person cleanly with smooth mask
   if (personCanvas.width !== w || personCanvas.height !== h) {
     personCanvas.width = w;
     personCanvas.height = h;
@@ -353,9 +389,8 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
 
   personCtx.save();
   personCtx.globalCompositeOperation = "destination-in";
-  if (!isIOS) {
-    personCtx.filter = "blur(1.5px)";
-  }
+  personCtx.imageSmoothingEnabled = true;
+  personCtx.imageSmoothingQuality = "high";
   if (mirrored) {
     personCtx.translate(w, 0);
     personCtx.scale(-1, 1);
@@ -365,6 +400,46 @@ export function drawVideoWithVirtualBg(ctx, video, w, h, bgId, mirrored) {
 
   // 4) Composite foreground person over background
   ctx.drawImage(personCanvas, 0, 0, w, h);
+}
+
+// Buttery-smooth Soft Blur (uses native CSS filter on half-res canvas, or multi-pass bilinear fallback)
+function drawSmoothSoftBlur(ctx, drawCroppedVideo, w, h) {
+  const halfW = Math.round(w * 0.5);
+  const halfH = Math.round(h * 0.5);
+  if (blurCanvasA.width !== halfW || blurCanvasA.height !== halfH) {
+    blurCanvasA.width = halfW;
+    blurCanvasA.height = halfH;
+  }
+
+  if (typeof blurCtxA.filter === "string") {
+    blurCtxA.save();
+    blurCtxA.filter = "blur(8px)";
+    drawCroppedVideo(blurCtxA, halfW, halfH);
+    blurCtxA.restore();
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(blurCanvasA, 0, 0, halfW, halfH, 0, 0, w, h);
+    ctx.restore();
+    return;
+  }
+
+  // Fallback progressive multi-pass blur (smooth, non-blocky)
+  const qW = Math.round(w * 0.25);
+  const qH = Math.round(h * 0.25);
+  if (blurCanvasB.width !== qW || blurCanvasB.height !== qH) {
+    blurCanvasB.width = qW;
+    blurCanvasB.height = qH;
+  }
+  drawCroppedVideo(blurCtxA, halfW, halfH);
+  blurCtxB.imageSmoothingEnabled = true;
+  blurCtxB.drawImage(blurCanvasA, 0, 0, halfW, halfH, 0, 0, qW, qH);
+  blurCtxA.imageSmoothingEnabled = true;
+  blurCtxA.drawImage(blurCanvasB, 0, 0, qW, qH, 0, 0, halfW, halfH);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(blurCanvasA, 0, 0, halfW, halfH, 0, 0, w, h);
+  ctx.restore();
 }
 
 function drawCoverImage(ctx, img, w, h) {

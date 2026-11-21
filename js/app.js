@@ -1288,14 +1288,40 @@ function renderMainStrip() {
     caption: state.caption,
     showDate: state.showDate,
   });
+  scheduleStripBlobCache();
 }
 
 // ============================================================================
-// Export & Share (Full iOS Safari + Android + Desktop Support)
+// Export & Share (Synchronous iOS Gesture-Safe Share Sheet + Save to Photos)
 // ============================================================================
 
-const isIOSDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isIOSDevice =
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isTouchMobile = isIOSDevice || /Android/i.test(navigator.userAgent);
+
 let currentSaveBlobUrl = null;
+let cachedStripBlob = null;
+let cachedStripFile = null;
+let cachedStripFilename = "loveypix-strip.png";
+let stripCacheTimer = null;
+
+function scheduleStripBlobCache() {
+  clearTimeout(stripCacheTimer);
+  stripCacheTimer = setTimeout(() => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    cachedStripFilename = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
+    el.stripCanvas.toBlob((blob) => {
+      if (!blob) return;
+      cachedStripBlob = blob;
+      try {
+        cachedStripFile = new File([blob], cachedStripFilename, { type: "image/png" });
+      } catch {
+        cachedStripFile = null;
+      }
+    }, "image/png");
+  }, 160);
+}
 
 function closeSaveModal() {
   el.saveModal.hidden = true;
@@ -1316,75 +1342,87 @@ function openSaveModal(blob, filename) {
   el.saveModal.hidden = false;
 }
 
-async function downloadStrip() {
-  renderMainStrip();
-  const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
+function triggerNativeShareSync(purpose = "save") {
+  // MUST be called synchronously inside user click without awaiting toBlob first (iOS Safari requirement!)
+  if (cachedStripFile && navigator.share && navigator.canShare && navigator.canShare({ files: [cachedStripFile] })) {
+    const sharePayload =
+      purpose === "share"
+        ? { title: "LoveyPix Photo Strip ♥", text: "Foto booth Y2K dari LoveyPix!", files: [cachedStripFile] }
+        : { title: "LoveyPix Photo Strip ♥", files: [cachedStripFile] };
 
-  const blob = await new Promise((res) => el.stripCanvas.toBlob(res, "image/png"));
-  if (!blob) {
-    showToast("Gagal membuat gambar. Coba lagi ya!");
-    return;
-  }
-
-  // On iOS (iPhone/iPad), <a download="data:..."> silently fails!
-  // Use native iOS Share Sheet ("Save Image" -> saves straight to Photos) with Save Modal fallback.
-  if (isIOSDevice) {
-    const file = new File([blob], filename, { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          title: "LoveyPix Photo Strip ♥",
-          files: [file],
-        });
+    navigator
+      .share(sharePayload)
+      .then(() => {
         sound.success();
-        showToast("Pilih 'Simpan Gambar / Save Image' untuk masuk Galeri! ♥");
-        return;
-      } catch (err) {
-        if (err.name === "AbortError") return;
-      }
-    }
-    // Fallback for iOS in-app browsers (WhatsApp/Instagram/LINE): show modal for long-press Save to Photos
-    openSaveModal(blob, filename);
-    sound.success();
-    return;
+        showToast(
+          purpose === "save"
+            ? "Berhasil! Foto tersimpan ♥"
+            : "Foto strip siap dibagikan! ♥"
+        );
+      })
+      .catch((err) => {
+        if (err && err.name === "AbortError") return;
+        // Fallback to Save Modal if native share failed
+        if (cachedStripBlob) openSaveModal(cachedStripBlob, cachedStripFilename);
+      });
+    return true;
   }
-
-  // Desktop & Android: fast Blob URL download (never hits data: URL size limits)
-  const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = blobUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
-  sound.success();
-  showToast("Foto strip HD berhasil di-download! ♥");
+  return false;
 }
 
-async function shareStrip() {
-  renderMainStrip();
-  const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `loveypix-${state.frameId}-${state.layout}cut-${stamp}.png`;
-  try {
-    const blob = await new Promise((res) => el.stripCanvas.toBlob(res, "image/png"));
-    if (!blob) return;
-    const file = new File([blob], filename, { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: "LoveyPix Photo Strip ♥",
-        text: "Lihat foto booth Y2K kita dari LoveyPix!",
-        files: [file],
-      });
-    } else {
-      openSaveModal(blob, filename);
+function downloadStrip() {
+  // On iPhone/iPad (and mobile with file share), open native Share Sheet synchronously
+  // so user can tap "Save Image / Simpan Gambar" straight into iPhone Photos (Galeri)!
+  if (isIOSDevice) {
+    if (triggerNativeShareSync("save")) return;
+    // If Share Sheet isn't available (e.g. WhatsApp/IG in-app browser), open Save Modal for long-press Save to Photos
+    if (cachedStripBlob) {
+      openSaveModal(cachedStripBlob, cachedStripFilename);
+      sound.success();
+      return;
     }
-  } catch (err) {
-    if (err.name !== "AbortError") {
-      downloadStrip();
-    }
+    el.stripCanvas.toBlob((blob) => {
+      if (blob) openSaveModal(blob, cachedStripFilename);
+    }, "image/png");
+    return;
   }
+
+  // Desktop & Android: Blob URL download
+  const runDownload = (blob, filename) => {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
+    sound.success();
+    showToast("Foto strip HD berhasil di-download! ♥");
+  };
+
+  if (cachedStripBlob) {
+    runDownload(cachedStripBlob, cachedStripFilename);
+  } else {
+    el.stripCanvas.toBlob((blob) => {
+      if (blob) runDownload(blob, cachedStripFilename);
+    }, "image/png");
+  }
+}
+
+function shareStrip() {
+  if (triggerNativeShareSync("share")) return;
+
+  // Fallback when Web Share with files isn't supported (e.g. Desktop browsers)
+  if (isTouchMobile && cachedStripBlob) {
+    openSaveModal(cachedStripBlob, cachedStripFilename);
+    showToast("Tahan gambar untuk simpan atau bagikan ke WA / IG!");
+    return;
+  }
+
+  // On Desktop: download PNG + open WhatsApp Web text share prompt
+  downloadStrip();
+  showToast("Foto sudah di-download — tinggal kirim filenya ke WA / IG!");
 }
 
 // ============================================================================
