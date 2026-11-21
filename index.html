@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>LoveyPix — Online Y2K Couple Photo Booth</title>
+  <meta name="description" content="Photo booth online bergaya Y2K Retro & Playful untuk pasangan. Pilih 10 frame lucu, layout 3 atau 4 foto, filter estetik, langsung dari HP atau laptop!" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Silkscreen:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Decorative floating Y2K background elements -->
+  <div class="bg-decor" aria-hidden="true">
+    <span class="sparkle s1">✦</span>
+    <span class="sparkle s2">♥</span>
+    <span class="sparkle s3">★</span>
+    <span class="sparkle s4">✦</span>
+    <span class="sparkle s5">♥</span>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button type="button" class="brand" id="btnHome" aria-label="Kembali ke awal">
+        <span class="brand-icon" aria-hidden="true">♥</span>
+        <span class="brand-name">LoveyPix</span>
+        <span class="brand-tag">Y2K BOOTH</span>
+      </button>
+
+      <nav class="stepper" aria-label="Langkah photo booth">
+        <button type="button" class="step-pill active" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-label">Setup</span>
+        </button>
+        <span class="step-sep" aria-hidden="true">»</span>
+        <button type="button" class="step-pill" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-label">Foto</span>
+        </button>
+        <span class="step-sep" aria-hidden="true">»</span>
+        <button type="button" class="step-pill" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-label">Frame</span>
+        </button>
+      </nav>
+
+      <button type="button" class="icon-btn" id="btnSound" title="Suara Efek On/Off" aria-pressed="true">
+        <span id="soundIcon">🔊</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <!-- ==================== STEP 1: SETUP ==================== -->
+    <section class="view active" id="viewSetup" aria-labelledby="setupHeading">
+      <div class="setup-grid">
+        <!-- Left: Retro Y2K Hero Window -->
+        <div class="retro-window hero-window">
+          <div class="window-bar">
+            <div class="window-dots" aria-hidden="true">
+              <span class="dot pink"></span>
+              <span class="dot yellow"></span>
+              <span class="dot lime"></span>
+            </div>
+            <span class="window-title">LOVEYPIX_BOOTH.EXE</span>
+            <span class="window-close" aria-hidden="true">×</span>
+          </div>
+
+          <div class="hero-body">
+            <div class="hero-badge">★ COUPLE PHOTO BOOTH ONLINE ★</div>
+            <h1 id="setupHeading" class="hero-title">
+              Foto Lucu Bareng Doi, <span class="highlight">Langsung di Browser!</span>
+            </h1>
+            <p class="hero-desc">
+              Pilih strip 3 atau 4 foto, pakai kamera HP/laptop atau upload dari galeri, lalu hias dengan <strong>10 frame Y2K Retro &amp; Playful</strong>!
+            </p>
+
+            <!-- Setup Options -->
+            <div class="setup-card">
+              <div class="option-group">
+                <label class="option-label">1. Pilih Layout Strip</label>
+                <div class="layout-picker" role="radiogroup" aria-label="Pilih layout foto">
+                  <button type="button" class="choice-card active" data-layout="4" aria-checked="true" role="radio">
+                    <div class="mini-strip strip-4" aria-hidden="true">
+                      <span></span><span></span><span></span><span></span>
+                    </div>
+                    <div class="choice-text">
+                      <strong>4 Foto (1×4)</strong>
+                      <small>Klasik Life4Cuts</small>
+                    </div>
+                  </button>
+                  <button type="button" class="choice-card" data-layout="3" aria-checked="false" role="radio">
+                    <div class="mini-strip strip-3" aria-hidden="true">
+                      <span></span><span></span><span></span>
+                    </div>
+                    <div class="choice-text">
+                      <strong>3 Foto (1×3)</strong>
+                      <small>Lebih lega &amp; gemoy</small>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <label class="option-label">2. Pilih Cara Ambil Foto</label>
+                <div class="mode-picker" role="radiogroup" aria-label="Pilih mode input foto">
+                  <button type="button" class="choice-card active" data-mode="camera" aria-checked="true" role="radio">
+                    <span class="choice-emoji" aria-hidden="true">📸</span>
+                    <div class="choice-text">
+                      <strong>Kamera Live</strong>
+                      <small>Webcam / HP</small>
+                    </div>
+                  </button>
+                  <button type="button" class="choice-card" data-mode="upload" aria-checked="false" role="radio">
+                    <span class="choice-emoji" aria-hidden="true">🖼️</span>
+                    <div class="choice-text">
+                      <strong>Upload Galeri</strong>
+                      <small>Dari HP / Laptop</small>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="option-group" id="timerGroup">
+                <label class="option-label">3. Timer Jepret Otomatis</label>
+                <div class="pill-group" role="radiogroup" aria-label="Pilih timer countdown">
+                  <button type="button" class="pill-btn active" data-timer="3" role="radio" aria-checked="true">3 Detik</button>
+                  <button type="button" class="pill-btn" data-timer="5" role="radio" aria-checked="false">5 Detik</button>
+                  <button type="button" class="pill-btn" data-timer="0" role="radio" aria-checked="false">Manual</button>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary btn-xl" id="btnStartBooth">
+              <span>MULAI PHOTO BOOTH</span>
+              <span aria-hidden="true">✨</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Animated Demo Preview Strip -->
+        <div class="hero-preview-col" aria-hidden="true">
+          <div class="floating-stickers">
+            <span class="sticker-badge sb-1">10 FRAME Y2K!</span>
+            <span class="sticker-badge sb-2">100% GRATIS ♥</span>
+          </div>
+          <div class="demo-strip-wrapper">
+            <canvas id="demoStripCanvas" width="360" height="840"></canvas>
+          </div>
+          <p class="demo-caption">Contoh hasil strip — klik mulai untuk foto kalian!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 2A: FULLSCREEN CAMERA BOOTH ==================== -->
+    <section class="fullscreen-booth" id="fullscreenBooth" aria-label="Layar Kamera Fullscreen" hidden>
+      <!-- Top Floating HUD -->
+      <header class="fs-topbar">
+        <div class="fs-top-left">
+          <button type="button" class="fs-pill-btn" id="btnFsBack">← Setup</button>
+          <span class="fs-status-badge" id="cameraStatusPill">Foto 0/4</span>
+        </div>
+
+        <div class="fs-top-right">
+          <button type="button" class="fs-pill-btn active" id="btnMirror" title="Mirror kamera">
+            🪞 <span id="mirrorLabel">ON</span>
+          </button>
+          <button type="button" class="fs-pill-btn" id="btnFlipCam" title="Ganti kamera">
+            🔄 Kamera
+          </button>
+          <button type="button" class="fs-pill-btn" id="btnCycleTimer" title="Ubah timer">
+            ⏱️ <span id="timerLabel">3d</span>
+          </button>
+          <button type="button" class="fs-pill-btn fs-upload-switch" id="btnFsSwitchUpload">
+            🖼️ Upload
+          </button>
+        </div>
+      </header>
+
+      <!-- Center Fullscreen Stage + Floating Mini Slots -->
+      <div class="fs-center">
+        <div class="fs-stage-wrap" id="viewfinderWrap">
+          <video id="cameraVideo" autoplay playsinline muted hidden></video>
+          <canvas id="liveCameraCanvas" width="960" height="720"></canvas>
+          <div class="filter-tint-overlay" id="cameraTintOverlay"></div>
+
+          <!-- AI Virtual BG Loading Pill -->
+          <div class="ai-loading-pill" id="aiLoadingPill" hidden>✨ Memuat AI Virtual Background...</div>
+
+          <!-- Countdown & Flash -->
+          <div class="countdown-overlay" id="countdownOverlay" hidden>
+            <span id="countdownNumber">3</span>
+          </div>
+          <div class="flash-overlay" id="flashOverlay"></div>
+
+          <!-- Camera Fallback / Error -->
+          <div class="camera-error" id="cameraError" hidden>
+            <div class="error-emoji">📷</div>
+            <h3>Kamera tidak dapat diakses</h3>
+            <p id="cameraErrorText">Izinkan akses kamera di browser kamu, atau pakai mode Upload dari Galeri.</p>
+            <div class="error-actions">
+              <button type="button" class="btn-secondary" id="btnRetryCamera">Coba Lagi</button>
+              <button type="button" class="btn-primary" id="btnFallbackUpload">Upload dari Galeri</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Thumbnail Rail (Tap to Retake!) -->
+        <aside class="fs-slots-rail" aria-label="Hasil foto sementara">
+          <div class="fs-slots-title">Pose (<span id="fsFilledCount">0</span>/<span id="fsTotalCount">4</span>)</div>
+          <div class="fs-slots-list" id="fsSlotsGrid"></div>
+        </aside>
+      </div>
+
+      <!-- Bottom Floating Dock: Tabs (Filter / Background / Karakter) + Shutter -->
+      <footer class="fs-dock">
+        <div class="fs-tray-header">
+          <div class="fs-effect-tabs" role="tablist" aria-label="Efek kamera">
+            <button type="button" class="fs-tab active" data-dock-tab="filter" role="tab" aria-selected="true">🌈 Filter</button>
+            <button type="button" class="fs-tab" data-dock-tab="bg" role="tab" aria-selected="false">🖼️ Virtual BG</button>
+            <button type="button" class="fs-tab" data-dock-tab="char" role="tab" aria-selected="false">🧸 Karakter</button>
+          </div>
+
+          <div class="fs-char-tools" id="fsCharTools" hidden>
+            <input type="file" id="charPngInput" accept="image/png,image/webp,image/*" multiple hidden />
+            <button type="button" class="fs-pos-btn fs-upload-char-btn" id="btnUploadChar" title="Upload PNG karakter transparan dari perangkat">
+              + Upload PNG
+            </button>
+            <button type="button" class="fs-pos-btn" id="btnCharSize" hidden title="Ubah ukuran karakter">
+              📐 <strong id="charSizeLabel">Sedang</strong>
+            </button>
+            <button type="button" class="fs-pos-btn" id="btnCharPos" hidden title="Ubah posisi karakter">
+              📍 <strong id="charPosLabel">Kanan</strong>
+            </button>
+          </div>
+        </div>
+
+        <!-- Character Pack Filter Pills (only visible in Karakter tab) -->
+        <div class="fs-pack-scroll" id="fsCharPacksWrap" hidden>
+          <div class="fs-pack-row" id="fsCharPacks" role="tablist" aria-label="Kategori karakter"></div>
+        </div>
+
+        <div class="fs-tray-scroll">
+          <div class="fs-chips-row" id="fsFilterChips" role="radiogroup" aria-label="Pilih filter"></div>
+          <div class="fs-chips-row" id="fsBgChips" role="radiogroup" aria-label="Pilih virtual background" hidden></div>
+          <div class="fs-chips-row" id="fsCharChips" role="radiogroup" aria-label="Pilih karakter" hidden></div>
+        </div>
+
+        <div class="fs-action-bar">
+          <button type="button" class="btn-secondary btn-sm" id="btnResetShots" hidden>↺ Ulang</button>
+          <button type="button" class="btn-shutter fs-shutter" id="btnShutter">
+            <span class="shutter-ring"></span>
+            <span id="shutterText">JEPRET OTOMATIS</span>
+          </button>
+          <button type="button" class="btn-primary btn-sm fs-next-btn" id="btnFsNext" disabled>
+            Lanjut Frame →
+          </button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- ==================== STEP 2B: UPLOAD GALERI VIEW ==================== -->
+    <section class="view" id="viewCapture" aria-labelledby="captureHeading">
+      <div class="capture-header">
+        <div>
+          <h2 id="captureHeading" class="section-title">Upload Foto <span class="badge-inline" id="captureLayoutBadge">4 FOTO</span></h2>
+          <p class="section-sub" id="captureHint">Upload foto favorit kalian dari galeri HP atau laptop!</p>
+        </div>
+        <div class="mode-switch-inline">
+          <button type="button" class="tab-mini" id="tabCamera">📸 Kamera Fullscreen</button>
+          <button type="button" class="tab-mini active" id="tabUpload">🖼️ Upload</button>
+        </div>
+      </div>
+
+      <div class="capture-grid">
+        <div class="retro-window stage-window">
+          <div class="window-bar">
+            <div class="window-dots" aria-hidden="true">
+              <span class="dot pink"></span>
+              <span class="dot yellow"></span>
+              <span class="dot lime"></span>
+            </div>
+            <span class="window-title" id="stageWindowTitle">GALLERY_UPLOAD.EXE</span>
+            <span class="window-close" aria-hidden="true">♥</span>
+          </div>
+
+          <div class="stage-body" id="uploadPanel">
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload foto dari perangkat">
+              <input type="file" id="multiFileInput" accept="image/*" multiple hidden />
+              <div class="dropzone-icon">📁✨</div>
+              <h3>Pilih atau Tarik Foto ke Sini</h3>
+              <p>Pilih hingga <strong id="uploadCountTarget">4</strong> foto dari galeri HP atau laptop kamu.</p>
+              <span class="btn-secondary btn-sm">Pilih Foto dari Galeri</span>
+            </div>
+            <p class="upload-tip">💡 Tips: Kamu juga bisa klik masing-masing slot di samping/bawah untuk mengganti satu foto tertentu.</p>
+          </div>
+
+          <div class="filter-bar-wrap">
+            <span class="filter-bar-title">Filter Warna:</span>
+            <div class="filter-chips" id="captureFilterChips" role="radiogroup" aria-label="Pilih filter foto"></div>
+          </div>
+        </div>
+
+        <!-- Slots Tray -->
+        <aside class="slots-panel">
+          <div class="slots-header">
+            <h3>Hasil Foto (<span id="filledCount">0</span>/<span id="totalCount">4</span>)</h3>
+            <small>Klik foto untuk retake / ganti</small>
+          </div>
+          <div class="slots-grid" id="slotsGrid"></div>
+          <input type="file" id="singleSlotInput" accept="image/*" hidden />
+
+          <div class="slots-footer">
+            <button type="button" class="btn-primary btn-lg full-width" id="btnGoToFrames" disabled>
+              <span>LANJUT PILIH FRAME</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 3: FRAME & DOWNLOAD ==================== -->
+    <section class="view" id="viewCustomize" aria-labelledby="customizeHeading">
+      <div class="customize-header">
+        <div>
+          <h2 id="customizeHeading" class="section-title">Pilih Frame Y2K Favoritmu! ✨</h2>
+          <p class="section-sub">Semua 10 frame langsung menyesuaikan fotomu. Download PNG resolusi tinggi!</p>
+        </div>
+        <button type="button" class="btn-secondary" id="btnBackToCapture">← Edit / Retake Foto</button>
+      </div>
+
+      <div class="customize-grid">
+        <!-- Left: Live Rendered Strip Preview -->
+        <div class="preview-column">
+          <div class="retro-window preview-window">
+            <div class="window-bar">
+              <div class="window-dots" aria-hidden="true">
+                <span class="dot pink"></span>
+                <span class="dot yellow"></span>
+                <span class="dot lime"></span>
+              </div>
+              <span class="window-title" id="previewWindowTitle">STRIP_PREVIEW.PNG</span>
+              <span class="window-close" aria-hidden="true">♥</span>
+            </div>
+            <div class="canvas-stage">
+              <canvas id="stripCanvas"></canvas>
+            </div>
+          </div>
+
+          <div class="download-actions">
+            <button type="button" class="btn-primary btn-xl full-width" id="btnDownload">
+              <span>DOWNLOAD FOTO STRIP (HD PNG)</span>
+              <span aria-hidden="true">⬇️</span>
+            </button>
+            <div class="secondary-actions">
+              <button type="button" class="btn-secondary" id="btnShare" hidden>📤 Bagikan</button>
+              <button type="button" class="btn-secondary" id="btnStartOver">🔄 Sesi Baru</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: 10 Frames & Tweaks -->
+        <div class="controls-column">
+          <!-- 10 Frames Picker -->
+          <div class="control-box">
+            <div class="control-box-head">
+              <h3>🎨 10 Frame Y2K Couple</h3>
+              <span class="active-frame-name" id="activeFrameName">Pixel Love</span>
+            </div>
+            <div class="frames-grid" id="framesGrid" role="radiogroup" aria-label="Pilih desain frame"></div>
+          </div>
+
+          <!-- Filter Picker -->
+          <div class="control-box">
+            <div class="control-box-head">
+              <h3>🌈 Filter Foto</h3>
+            </div>
+            <div class="filter-chips" id="customizeFilterChips" role="radiogroup" aria-label="Ubah filter foto"></div>
+          </div>
+
+          <!-- Caption & Options -->
+          <div class="control-box">
+            <div class="control-box-head">
+              <h3>💌 Personalisasi Strip</h3>
+            </div>
+            <div class="custom-options-row">
+              <div class="input-wrap">
+                <label for="coupleCaptionInput">Teks / Nama Pasangan (opsional)</label>
+                <input type="text" id="coupleCaptionInput" maxlength="26" placeholder="Contoh: Raka ♥ Nara" />
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="showDateCheckbox" checked />
+                <span>Tampilkan tanggal hari ini</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Dibuat dengan ♥ oleh <strong>LoveyPix</strong> — Semua foto diproses 100% di perangkatmu (privasi aman).</p>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
